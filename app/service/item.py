@@ -16,11 +16,22 @@ import app.repositories.casbin as CasbinRepo
 
 # get the enforce functions
 from app.casbin.enforcer import enforce
+from app.casbin.resource_id_converter import (
+    get_item_id_from_resource_id,
+    get_resource_id_from_item_id,
+)
+from app.casbin.role_definition import (
+    ResourceDomainEnum,
+    ResourceRightsEnum,
+    ResourceActionsEnum,
+)
+from app.casbin.enforcer import get_or_create_enforcer
 
 
 def create_item(item_create: ItemCreate, actor: UserInJWT) -> Item:
     """no need to implement enforce here
     cos everyone can create item"""
+
     with get_db() as db:
         # create the item
         db_item = ItemRepo.create(db=db, item_create=item_create, actor=actor)
@@ -68,35 +79,28 @@ def list_items(item_query: ItemQuery, actor: UserInJWT) -> ItemWithPaging:
     """no need to enforce"""
 
     with get_db() as db:
+        casbin_enforcer = get_or_create_enforcer(
+            tenant_id=actor.tenant_id, actor_id=actor.id
+        )
+        permissions = casbin_enforcer.get_permissions_for_user_in_domain(
+            user=actor.id, domain=actor.tenant_id
+        )
 
-        if actor.is_admin:
-            db_items, paging = ItemRepo.get_all(
-                # well here we need something like tenant id...
-                db=db,
-                query_pagination=item_query,
+        item_ids = [
+            get_item_id_from_resource_id(
+                resource_id=p[2],
+                domain=ResourceDomainEnum.items,
                 tenant_id=actor.tenant_id,
             )
-        else:
-            casbin_enforcer.load_filtered_policy(filter=Filter(v0=[actor.id]))
-            permissions = casbin_enforcer.get_permissions_for_user_in_domain(
-                user=actor.id, domain=actor.tenant_id
-            )
+            for p in permissions
+            if ResourceDomainEnum.items in p[2]
+        ]
 
-            item_ids = [
-                get_item_id_from_resource_id(
-                    resource_id=p[2],
-                    domain=ResourceDomainEnum.items,
-                    tenant_id=actor.tenant_id,
-                )
-                for p in permissions
-                if ResourceDomainEnum.items in p[2]
-            ]
-
-            db_items, paging = ItemRepo.get_all(
-                db=db,
-                query_pagination=item_query,
-                item_ids=item_ids,
-            )
+        db_items, paging = ItemRepo.get_all(
+            db=db,
+            query_pagination=item_query,
+            item_ids=item_ids,
+        )
 
         # use list(set([])) to remove dups
         # user_ids = list(
@@ -130,9 +134,9 @@ def share_item(item_id: str, user_share: UserShare, actor: UserInJWT):
         # so here need to ask user management
 
         # raises exception if the user does not exist
-        sharee = UserManagementService.get_user_info_from_user_management(
-            user_id=user_share.id, tenant_id=actor.tenant_id
-        )
+        # sharee = UserManagementService.get_user_info_from_user_management(
+        #     user_id=user_share.id, tenant_id=actor.tenant_id
+        # )
         # create the user if the user is not here
         db_sharee = UserRepo.get_or_create(db=db, user=sharee)
 

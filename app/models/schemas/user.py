@@ -3,7 +3,6 @@ from typing import List, Optional
 from app.casbin.role_definition import ResourceRightsEnum
 
 
-
 class UserShare(BaseModel):
     id: str
     role: ResourceRightsEnum

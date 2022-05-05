@@ -1,3 +1,8 @@
+# create (first) migration by
+# python -m alembic revision --autogenerate -m "first migration" to create a migration
+# run the migration by
+# python -m alembic upgrade head
+
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
@@ -7,6 +12,8 @@ from app.utils.config import configurations as app_config
 from app.models.db.models import Base
 
 from alembic import context
+import app.utils.context_variables as contextvars
+from app.utils.db import get_schema_for_tenant
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -31,6 +38,7 @@ target_metadata = Base.metadata
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 
+# schemas = config.get_main_option('schemas')
 
 def run_migrations_offline():
     """Run migrations in 'offline' mode.
@@ -56,7 +64,7 @@ def run_migrations_offline():
         context.run_migrations()
 
 
-def run_migrations_online(current_tenant: str = None):
+def run_migrations_online():
     """Run migrations in 'online' mode.
 
     In this scenario we need to create an Engine
@@ -71,22 +79,29 @@ def run_migrations_online(current_tenant: str = None):
 
     # below statement will need to work with alembic -x
     # alembic -x tenant=some_schema revision -m "rev1" --autogenerate
-    if current_tenant is None:
-        current_tenant = context.get_x_argument(as_dictionary=True).get("tenant")
+    # if current_tenant is None:
+    #     current_tenant = context.get_x_argument(as_dictionary=True).get("tenant")
 
     with connectable.connect() as connection:
 
         # set search path on the connection, which ensures that
         # PostgreSQL will emit all CREATE / ALTER / DROP statements
         # in terms of this schema by default
-        connection.execute("set search_path to %s" % current_tenant)
+        schema = contextvars.schema.get()
+        if schema is None:
+            schema = get_schema_for_tenant(app_config.DEFAULT_TENANT_ID)
+        print(f"schema to do is {schema}")
+        conn = connection.execution_options(schema_translate_map={None: schema})
+        # print(f"SCHEMA is: {schema}")
+
+        # connection.execute("set search_path to %s" % schema)
 
         # make use of non-supported SQLAlchemy attribute to ensure
         # the dialect reflects tables in terms of the current tenant name
-        connection.dialect.default_schema_name = current_tenant
+        # connection.dialect.default_schema_name = schema
 
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=conn, target_metadata=target_metadata
         )
 
         with context.begin_transaction():
