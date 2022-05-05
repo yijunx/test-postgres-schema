@@ -1,0 +1,24 @@
+version: "3"
+
+services:
+  test-postgres-schema:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      - ..:/opt/yijunx/code
+      - ~/etc/localtime:/opt/yijunx/etc/localtime
+      - ~/etc/timezone:/opt/yijunx/etc/timezone
+      - ../../certs:/opt/yijunx/etc/certs
+    command: ["tail -f /dev/null"]
+    ports:
+      - 8001:8000
+
+  db:
+    image: postgres:11
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=db
